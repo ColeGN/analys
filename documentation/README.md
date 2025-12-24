@@ -1,6 +1,6 @@
 # Time Series Analysis Project - Complete Guide
 
-Complete documentation for both **Python** and **R** implementations of time series detrending analysis.
+Complete documentation for **Python**, **R**, and **Gretl** implementations of time series detrending analysis.
 
 ---
 
@@ -18,13 +18,20 @@ project/
 │       ├── detrent.analysis.R
 │       ├── install_packages.R
 │       └── visualization.R
+│   └── gretl/              # Gretl scripts
+│       ├── detrend_analysis.inp
+│       ├── run.sh
+│       └── verify.sh
 ├── output/
 │   ├── python/            # Python outputs ONLY
 │   │   ├── plots/         # Python visualizations
 │   │   └── results/       # Python results CSV
-│   └── r/                 # R outputs ONLY
-│       ├── plots/         # R visualizations
-│       └── results/       # R results CSV
+│   ├── r/                 # R outputs ONLY
+│   │   ├── plots/         # R visualizations
+│   │   └── results/       # R results CSV
+│   └── gretl/             # Gretl outputs
+│       ├── plots/         # Gretl visualizations
+│       └── results/       # Gretl results CSV
 ├── documentation/          # This folder - all documentation
 ├── requirements.txt       # Python dependencies
 └── venv/                  # Python virtual environment (if created)
@@ -66,6 +73,18 @@ Rscript scripts/r/convert_data.R
 Rscript scripts/r/detrent.analysis.R
 
 # Outputs: output/r/plots/ and output/r/results/
+```
+
+### Gretl Version
+
+```bash
+# Run the analysis script
+./scripts/gretl/run.sh
+
+# Verify outputs
+./scripts/gretl/verify.sh
+
+# Outputs: output/gretl/plots/ and output/gretl/results/
 ```
 
 ---
@@ -160,6 +179,38 @@ Rscript scripts/r/detrent.analysis.R
 
 ---
 
+### Gretl Setup
+
+#### Step 1: Install Gretl
+
+```bash
+# On macOS with Homebrew
+brew install gretl
+
+# Or download from: https://gretl.sourceforge.net/
+```
+
+Gretl is already installed if you see it in Applications.
+
+#### Step 2: Run Gretl Script
+
+```bash
+# Run the analysis script
+./scripts/gretl/run.sh
+
+# Or manually:
+/Applications/Gretl.app/Contents/Resources/bin/gretlcli -b scripts/gretl/detrend_analysis.inp
+
+# Verify outputs
+./scripts/gretl/verify.sh
+```
+
+**Note:** The script uses the native .gdt data format directly (no conversion needed).
+
+**Outputs:** `output/gretl/plots/` and `output/gretl/results/`
+
+---
+
 ## 📊 What Each Script Does
 
 ### Data Conversion (`convert_data.py` / `convert_data.R`)
@@ -172,9 +223,11 @@ Rscript scripts/r/detrent.analysis.R
   - Creates date column (monthly data from 1948-01)
   - Saves as CSV for analysis
 
-### Detrending Analysis (`detrend_analysis.py` / `detrent.analysis.R`)
+**Note:** Gretl script uses the .gdt file directly (no conversion needed).
 
-- **Input:** `data/EconomicsUSA.csv`
+### Detrending Analysis (`detrend_analysis.py` / `detrent.analysis.R` / `detrend_analysis.inp`)
+
+- **Input:** `data/EconomicsUSA.csv` (Python/R) or `data/EconomicsUSA.gdt` (Gretl)
 - **Output:** 
   - Plots: Linear trend and moving average visualizations
   - Results: Forecast evaluation metrics CSV
@@ -216,6 +269,17 @@ Rscript scripts/r/detrent.analysis.R
 - `forecast_evaluation.csv` - All forecast metrics for both methods
 
 ### R Outputs (`output/r/`)
+
+**Plots:**
+- `indpro_linear_trend.png` - Industrial Production linear trend
+- `indpro_moving_average.png` - Industrial Production moving average
+- `cpiaucsl_linear_trend.png` - CPI linear trend
+- `cpiaucsl_moving_average.png` - CPI moving average
+
+**Results:**
+- `forecast_evaluation.csv` - All forecast metrics for both methods
+
+### Gretl Outputs (`output/gretl/`)
 
 **Plots:**
 - `indpro_linear_trend.png` - Industrial Production linear trend

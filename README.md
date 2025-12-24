@@ -1,13 +1,13 @@
 # Time Series Analysis Project
 
-This project contains both **Python** and **R** implementations for time series detrending analysis.
+This project contains **Python**, **R**, and **Gretl** implementations for time series detrending analysis.
 
 ## 📖 Complete Documentation
 
-**👉 See `documentation/README.md` for the complete guide covering both Python and R!**
+**👉 See `documentation/README.md` for the complete guide covering Python, R, and Gretl!**
 
 The documentation includes:
-- Detailed setup instructions for both languages
+- Detailed setup instructions for Python, R, and Gretl
 - Step-by-step guides
 - Troubleshooting
 - Understanding results
@@ -30,19 +30,24 @@ Rscript scripts/r/convert_data.R
 Rscript scripts/r/detrent.analysis.R
 ```
 
+### Gretl
+```bash
+./scripts/gretl/run.sh
+```
+
 ## Project Structure
 
 ```
 ├── data/              # Shared data files
 ├── scripts/
 │   ├── python/       # Python scripts
-│   └── r/            # R scripts
+│   ├── r/            # R scripts
+│   └── gretl/        # Gretl scripts
 ├── output/
 │   ├── python/       # Python outputs
-│   └── r/           # R outputs
+│   ├── r/           # R outputs
+│   └── gretl/       # Gretl outputs
 └── documentation/    # Complete documentation
 ```
 
 **For full documentation, see: `documentation/README.md`**
-
-# analys
