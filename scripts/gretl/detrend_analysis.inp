@@ -1,0 +1,155 @@
+set workdir "/Users/gantogtokhnyamrentsen/Desktop/untitled folder 3/untitled folder"
+
+open data/EconomicsUSA.gdt
+
+setobs 12 1948:01 --time-series
+
+series t
+loop i=1..$nobs
+    t[i] = i
+endloop
+
+function scalar theil_u(series actual, series forecast)
+    scalar n = $nobs
+    if n <= 1
+        return NA
+    endif
+    series actual_next = actual(1)
+    series forecast_prev = forecast(-1)
+    series actual_prev = actual(-1)
+    smpl 2 n
+    series num_series = ((forecast_prev - actual_next) / actual_prev)^2
+    series den_series = ((actual_next - actual_prev) / actual_prev)^2
+    scalar num_val = mean(num_series)
+    scalar den_val = mean(den_series)
+    smpl full
+    if missing(den_val) || den_val == 0
+        return NA
+    endif
+    return num_val / den_val
+end function
+
+function matrix mse_decomp(series actual, series forecast)
+    scalar T = $nobs
+    scalar scale = (T - 1) / T
+    scalar y_mean = mean(actual)
+    scalar f_mean = mean(forecast)
+    scalar sy = sqrt(scale * var(actual))
+    scalar sf = sqrt(scale * var(forecast))
+    scalar r = corr(actual, forecast)
+    if missing(r)
+        r = 0
+    endif
+    scalar bias = (y_mean - f_mean)^2
+    scalar regression = (sf - r * sy)^2
+    scalar disturbance = (1 - r^2) * sy^2
+    scalar MSE_total = bias + regression + disturbance
+    if MSE_total == 0 || missing(MSE_total)
+        return {0, 0, 0, 0}
+    endif
+    matrix decomp = {MSE_total, bias/MSE_total, regression/MSE_total, disturbance/MSE_total}
+    return decomp
+end function
+
+scalar T = $nobs
+scalar m_T = (T + 1) / 2
+scalar v_T = T * (T + 1) / 12
+
+series temp_prod1 = t * indpro
+scalar sum_prod1 = sum(temp_prod1)
+scalar var_mean1 = mean(indpro)
+scalar c_T1 = (sum_prod1 - T * (var_mean1 * (T + 1) / 2)) / (T - 1)
+scalar beta1 = c_T1 / v_T
+scalar alpha1 = var_mean1 - beta1 * m_T
+series indpro_trend = alpha1 + beta1 * t
+series indpro_ma4 = movavg(indpro, 4)
+
+series temp_prod2 = t * cpiaucsl
+scalar sum_prod2 = sum(temp_prod2)
+scalar var_mean2 = mean(cpiaucsl)
+scalar c_T2 = (sum_prod2 - T * (var_mean2 * (T + 1) / 2)) / (T - 1)
+scalar beta2 = c_T2 / v_T
+scalar alpha2 = var_mean2 - beta2 * m_T
+series cpiaucsl_trend = alpha2 + beta2 * t
+series cpiaucsl_ma4 = movavg(cpiaucsl, 4)
+
+matrix results = {}
+
+series forecast = indpro_trend
+series actual = indpro
+series error = actual - forecast
+scalar me = mean(error)
+scalar rmse = sqrt(mean(error^2))
+scalar mae = mean(abs(error))
+scalar mpe = mean(100 * error / actual)
+scalar mape = mean(100 * abs(error / actual))
+scalar theilu = theil_u(actual, forecast)
+matrix decomp = mse_decomp(actual, forecast)
+scalar mse_val = decomp[1]
+scalar um = decomp[2]
+scalar ur = decomp[3]
+scalar ud = decomp[4]
+matrix row = {me, rmse, mae, mpe, mape, theilu, mse_val, um, ur, ud}
+results = results | row
+
+forecast = indpro_ma4
+error = actual - forecast
+me = mean(error)
+rmse = sqrt(mean(error^2))
+mae = mean(abs(error))
+mpe = mean(100 * error / actual)
+mape = mean(100 * abs(error / actual))
+theilu = theil_u(actual, forecast)
+decomp = mse_decomp(actual, forecast)
+mse_val = decomp[1]
+um = decomp[2]
+ur = decomp[3]
+ud = decomp[4]
+row = {me, rmse, mae, mpe, mape, theilu, mse_val, um, ur, ud}
+results = results | row
+
+forecast = cpiaucsl_trend
+actual = cpiaucsl
+error = actual - forecast
+me = mean(error)
+rmse = sqrt(mean(error^2))
+mae = mean(abs(error))
+mpe = mean(100 * error / actual)
+mape = mean(100 * abs(error / actual))
+theilu = theil_u(actual, forecast)
+decomp = mse_decomp(actual, forecast)
+mse_val = decomp[1]
+um = decomp[2]
+ur = decomp[3]
+ud = decomp[4]
+row = {me, rmse, mae, mpe, mape, theilu, mse_val, um, ur, ud}
+results = results | row
+
+forecast = cpiaucsl_ma4
+error = actual - forecast
+me = mean(error)
+rmse = sqrt(mean(error^2))
+mae = mean(abs(error))
+mpe = mean(100 * error / actual)
+mape = mean(100 * abs(error / actual))
+theilu = theil_u(actual, forecast)
+decomp = mse_decomp(actual, forecast)
+mse_val = decomp[1]
+um = decomp[2]
+ur = decomp[3]
+ud = decomp[4]
+row = {me, rmse, mae, mpe, mape, theilu, mse_val, um, ur, ud}
+results = results | row
+
+outfile "output/gretl/results/forecast_evaluation.csv"
+printf "Model,ME,RMSE,MAE,MPE,MAPE,Theil_U,MSE,UM,UR,UD\n"
+printf "TREND_1,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g\n", results[1,1], results[1,2], results[1,3], results[1,4], results[1,5], results[1,6], results[1,7], results[1,8], results[1,9], results[1,10]
+printf "MA_1,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g\n", results[2,1], results[2,2], results[2,3], results[2,4], results[2,5], results[2,6], results[2,7], results[2,8], results[2,9], results[2,10]
+printf "TREND_2,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g\n", results[3,1], results[3,2], results[3,3], results[3,4], results[3,5], results[3,6], results[3,7], results[3,8], results[3,9], results[3,10]
+printf "MA_2,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g\n", results[4,1], results[4,2], results[4,3], results[4,4], results[4,5], results[4,6], results[4,7], results[4,8], results[4,9], results[4,10]
+end outfile
+
+catch gnuplot indpro indpro_trend --with-lines --output=output/gretl/plots/indpro_linear_trend.png
+catch gnuplot indpro indpro_ma4 --with-lines --output=output/gretl/plots/indpro_moving_average.png
+catch gnuplot cpiaucsl cpiaucsl_trend --with-lines --output=output/gretl/plots/cpiaucsl_linear_trend.png
+catch gnuplot cpiaucsl cpiaucsl_ma4 --with-lines --output=output/gretl/plots/cpiaucsl_moving_average.png
