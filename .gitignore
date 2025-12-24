@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# R
+.Rhistory
+.RData
+.Ruserdata
+
+# Output (keep structure, ignore old files)
+output/plots/
+output/results/
+!output/python/
+!output/r/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
