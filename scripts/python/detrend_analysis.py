@@ -1,277 +1,367 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 from scipy import stats
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+import os
+import warnings
+warnings.filterwarnings('ignore')
 
-def estimate_params(y):
-    T = len(y)
-    t = np.arange(1, T + 1)
-    m_T = (T + 1) / 2
-    v_T = T * (T + 1) / 12
-    c_T = (np.sum(t * y) - T * (np.mean(y) * (T + 1) / 2)) / (T - 1)
+try:
+    import seaborn as sns
+    HAS_SEABORN = True
+except ImportError:
+    HAS_SEABORN = False
+    print("Note: seaborn not available, using matplotlib for heatmap\n")
+def load_data(file_path):
+    """
+    Load cross-sectional dataset
+    Examples: housing.csv, students.csv, companies.csv, etc.
+    """
+    print("="*70)
+    print(" CROSS-SECTIONAL DATA ANALYSIS ".center(70))
+    print("="*70)
+    print("\n📂 Loading data from:", file_path)
     
-    beta = c_T / v_T
-    alpha = np.mean(y) - beta * m_T
+    try:
+        df = pd.read_csv(file_path)
+        print(f"✅ Loaded {len(df)} observations\n")
+        return df
+    except FileNotFoundError:
+        print("❌ File not found! Creating sample dataset...\n")
+        return create_sample_data()
+
+
+def create_sample_data():
+    """
+    Create sample cross-sectional data if you don't have a dataset yet
+    Example: Student performance data
+    """
+    np.random.seed(42)
+    n = 200
     
-    return {'alpha': alpha, 'beta': beta}
-
-
-def ME(actual, forecast):
-    return np.nanmean(actual - forecast)
-
-
-def RMSE(actual, forecast):
-    return np.sqrt(np.nanmean((actual - forecast) ** 2))
-
-
-def MAE(actual, forecast):
-    return np.nanmean(np.abs(actual - forecast))
-
-
-def MPE(actual, forecast):
-    return np.nanmean(100 * (actual - forecast) / actual)
-
-
-def MAPE(actual, forecast):
-    return np.nanmean(100 * np.abs((actual - forecast) / actual))
-
-
-def TheilU(actual, forecast):
-    n = len(actual)
-    if n <= 1:
-        return np.nan
+    df = pd.DataFrame({
+        'student_id': range(1, n+1),
+        'study_hours': np.random.uniform(1, 10, n),
+        'previous_grade': np.random.uniform(50, 95, n),
+        'attendance': np.random.uniform(60, 100, n),
+        'sleep_hours': np.random.uniform(4, 9, n),
+        'final_grade': None  # We'll calculate this
+    })
     
-    actual_shifted = actual[1:]
-    forecast_shifted = forecast[:-1]
-    actual_current = actual[:-1]
+    df['final_grade'] = (
+        40 + 
+        2.5 * df['study_hours'] + 
+        0.3 * df['previous_grade'] + 
+        0.2 * df['attendance'] + 
+        np.random.normal(0, 5, n)
+    )
+    df['final_grade'] = df['final_grade'].clip(0, 100)
     
-    mask = actual_current != 0
-    if not np.any(mask):
-        return np.nan
+    print("✅ Created sample student performance dataset")
+    print("   Variables: study_hours, previous_grade, attendance, sleep_hours, final_grade\n")
     
-    numerator = np.nanmean(((forecast_shifted[mask] - actual_shifted[mask]) / actual_current[mask]) ** 2)
-    denominator = np.nanmean(((actual_shifted[mask] - actual_current[mask]) / actual_current[mask]) ** 2)
-    
-    if np.isnan(denominator) or denominator == 0:
-        return np.nan
-    
-    return numerator / denominator
+    return df
 
 
-def MSE_decomposition(actual, forecast):
-    T = len(actual)
-    scale = (T - 1) / T
+def descriptive_analysis(df, output_dir):
+    """
+    Calculate and display descriptive statistics
+    """
+    print("\n" + "="*70)
+    print(" DESCRIPTIVE STATISTICS ".center(70))
+    print("="*70 + "\n")
     
-    y_mean = np.nanmean(actual)
-    f_mean = np.nanmean(forecast)
-    sy = np.sqrt(scale * np.nanvar(actual))
-    sf = np.sqrt(scale * np.nanvar(forecast))
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
     
-    valid_mask = ~(np.isnan(actual) | np.isnan(forecast))
-    if np.sum(valid_mask) > 1:
-        r = np.corrcoef(actual[valid_mask], forecast[valid_mask])[0, 1]
+    stats_df = pd.DataFrame({
+        'Mean': df[numeric_cols].mean(),
+        'Median': df[numeric_cols].median(),
+        'Std Dev': df[numeric_cols].std(),
+        'Min': df[numeric_cols].min(),
+        'Max': df[numeric_cols].max(),
+        'Skewness': df[numeric_cols].skew(),
+        'Kurtosis': df[numeric_cols].kurtosis()
+    })
+    
+    print(stats_df.round(3))
+    print("\n✅ Descriptive statistics calculated\n")
+    
+    stats_path = os.path.join(output_dir, 'results', 'descriptive_statistics.csv')
+    stats_df.to_csv(stats_path)
+    print(f"📁 Saved to: {stats_path}\n")
+    
+    return stats_df
+
+def correlation_analysis(df, output_dir):
+    print("="*70)
+    print(" CORRELATION ANALYSIS ".center(70))
+    print("="*70 + "\n")
+    
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
+    
+    corr_matrix = df[numeric_cols].corr()
+    
+    print("Correlation Matrix:")
+    print(corr_matrix.round(3))
+    print()
+    
+    corr_pairs = []
+    for i in range(len(corr_matrix.columns)):
+        for j in range(i+1, len(corr_matrix.columns)):
+            corr_pairs.append({
+                'Variable 1': corr_matrix.columns[i],
+                'Variable 2': corr_matrix.columns[j],
+                'Correlation': corr_matrix.iloc[i, j]
+            })
+    
+    corr_pairs_df = pd.DataFrame(corr_pairs)
+    corr_pairs_df = corr_pairs_df.sort_values('Correlation', 
+                                                key=abs, 
+                                                ascending=False)
+    
+    print("\nStrongest Correlations:")
+    print(corr_pairs_df.head(5).to_string(index=False))
+    print()
+    
+    plt.figure(figsize=(10, 8))
+    if HAS_SEABORN:
+        sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
+                    square=True, linewidths=1, fmt='.2f')
     else:
-        r = 0
+        im = plt.imshow(corr_matrix, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
+        plt.colorbar(im)
+        plt.xticks(range(len(corr_matrix.columns)), corr_matrix.columns, rotation=45, ha='right')
+        plt.yticks(range(len(corr_matrix.columns)), corr_matrix.columns)
+        for i in range(len(corr_matrix.columns)):
+            for j in range(len(corr_matrix.columns)):
+                plt.text(j, i, f'{corr_matrix.iloc[i, j]:.2f}', 
+                        ha='center', va='center', color='black')
+    plt.title('Correlation Matrix Heatmap', fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    plot_path = os.path.join(output_dir, 'plots', 'correlation_matrix.png')
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"✅ Saved: {plot_path}\n")
+    plt.close()
     
-    if np.isnan(r):
-        r = 0
-    
-    bias = (y_mean - f_mean) ** 2
-    regression = (sf - r * sy) ** 2
-    disturbance = (1 - r ** 2) * sy ** 2
-    
-    MSE_total = bias + regression + disturbance
-    
-    if MSE_total == 0 or np.isnan(MSE_total):
-        return {'MSE': 0, 'UM': 0, 'UR': 0, 'UD': 0}
-    
-    UM = bias / MSE_total
-    UR = regression / MSE_total
-    UD = disturbance / MSE_total
-    
-    return {'MSE': MSE_total, 'UM': UM, 'UR': UR, 'UD': UD}
+    return corr_matrix
 
+
+def regression_analysis(df, dependent_var, independent_vars, output_dir):
+    print("="*70)
+    print(" MULTIPLE REGRESSION ANALYSIS ".center(70))
+    print("="*70 + "\n")
+    
+    print(f"Dependent Variable: {dependent_var}")
+    print(f"Independent Variables: {', '.join(independent_vars)}\n")
+    
+    X = df[independent_vars].values
+    y = df[dependent_var].values
+    
+    mask = ~np.isnan(X).any(axis=1) & ~np.isnan(y)
+    X = X[mask]
+    y = y[mask]
+    
+    model = LinearRegression()
+    model.fit(X, y)
+    
+    y_pred = model.predict(X)
+    
+    r2 = r2_score(y, y_pred)
+    rmse = np.sqrt(mean_squared_error(y, y_pred))
+    adj_r2 = 1 - (1 - r2) * (len(y) - 1) / (len(y) - len(independent_vars) - 1)
+    
+    print("REGRESSION EQUATION:")
+    equation = f"{dependent_var} = {model.intercept_:.4f}"
+    for i, var in enumerate(independent_vars):
+        sign = "+" if model.coef_[i] >= 0 else ""
+        equation += f" {sign} {model.coef_[i]:.4f}*{var}"
+    print(equation)
+    print()
+    
+    print("COEFFICIENTS:")
+    coef_df = pd.DataFrame({
+        'Variable': independent_vars,
+        'Coefficient': model.coef_,
+        'Abs_Coefficient': np.abs(model.coef_)
+    }).sort_values('Abs_Coefficient', ascending=False)
+    print(coef_df[['Variable', 'Coefficient']].to_string(index=False))
+    print()
+    
+    print("MODEL FIT STATISTICS:")
+    print(f"  R-squared:          {r2:.4f}")
+    print(f"  Adjusted R-squared: {adj_r2:.4f}")
+    print(f"  RMSE:               {rmse:.4f}")
+    print()
+    
+    print("INTERPRETATION:")
+    strongest_var = coef_df.iloc[0]
+    print(f"  • {strongest_var['Variable']} has the strongest effect")
+    print(f"  • A 1-unit increase in {strongest_var['Variable']} leads to")
+    print(f"    {strongest_var['Coefficient']:.4f} change in {dependent_var}")
+    print(f"  • The model explains {r2*100:.1f}% of the variance\n")
+    
+    plt.figure(figsize=(10, 6))
+    plt.scatter(y, y_pred, alpha=0.5)
+    plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', lw=2)
+    plt.xlabel(f'Actual {dependent_var}')
+    plt.ylabel(f'Predicted {dependent_var}')
+    plt.title(f'Actual vs Predicted {dependent_var}\n(R² = {r2:.3f})')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plot_path = os.path.join(output_dir, 'plots', 'regression_fit.png')
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"✅ Saved: {plot_path}\n")
+    plt.close()
+    
+    residuals = y - y_pred
+    plt.figure(figsize=(10, 6))
+    plt.scatter(y_pred, residuals, alpha=0.5)
+    plt.axhline(y=0, color='r', linestyle='--', lw=2)
+    plt.xlabel(f'Predicted {dependent_var}')
+    plt.ylabel('Residuals')
+    plt.title('Residual Plot')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plot_path = os.path.join(output_dir, 'plots', 'residuals.png')
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print(f"✅ Saved: {plot_path}\n")
+    plt.close()
+    
+    results_df = pd.DataFrame({
+        'Metric': ['R-squared', 'Adjusted R-squared', 'RMSE', 'Intercept'],
+        'Value': [r2, adj_r2, rmse, model.intercept_]
+    })
+    coef_results = coef_df[['Variable', 'Coefficient']].rename(
+        columns={'Variable': 'Metric', 'Coefficient': 'Value'}
+    )
+    results_df = pd.concat([results_df, coef_results], ignore_index=True)
+    results_path = os.path.join(output_dir, 'results', 'regression_results.csv')
+    results_df.to_csv(results_path, index=False)
+    print(f"✅ Saved: {results_path}\n")
+    
+    return model, results_df
+
+
+def hypothesis_testing(df, group_var, test_var, output_dir):
+    print("="*70)
+    print(" HYPOTHESIS TESTING ".center(70))
+    print("="*70 + "\n")
+    
+    df_test = df.copy()
+    if df_test[group_var].dtype in [np.float64, np.int64]:
+        median_val = df_test[group_var].median()
+        df_test['group'] = df_test[group_var].apply(
+            lambda x: 'High' if x > median_val else 'Low'
+        )
+        group_var_used = 'group'
+        print(f"Created groups based on median split of original variable\n")
+    else:
+        group_var_used = group_var
+    
+    groups = df_test[group_var_used].unique()
+    
+    if len(groups) == 2:
+        group1 = df_test[df_test[group_var_used] == groups[0]][test_var].dropna()
+        group2 = df_test[df_test[group_var_used] == groups[1]][test_var].dropna()
+        
+        t_stat, p_value = stats.ttest_ind(group1, group2)
+        
+        print("TWO-SAMPLE T-TEST")
+        print(f"Testing: {test_var} across {group_var_used} groups\n")
+        print(f"Group 1 ({groups[0]}): Mean = {group1.mean():.3f}, SD = {group1.std():.3f}, N = {len(group1)}")
+        print(f"Group 2 ({groups[1]}): Mean = {group2.mean():.3f}, SD = {group2.std():.3f}, N = {len(group2)}\n")
+        print(f"T-statistic: {t_stat:.4f}")
+        print(f"P-value:     {p_value:.4f}\n")
+        
+        if p_value < 0.05:
+            print(f"✅ SIGNIFICANT: {test_var} differs significantly between groups (p < 0.05)")
+        else:
+            print(f"❌ NOT SIGNIFICANT: No significant difference between groups (p ≥ 0.05)")
+        
+        plt.figure(figsize=(10, 6))
+        df_test.boxplot(column=test_var, by=group_var_used)
+        plt.suptitle('')
+        plt.title(f'{test_var} by {group_var_used}\n(p-value = {p_value:.4f})')
+        plt.ylabel(test_var)
+        plt.tight_layout()
+        plot_path = os.path.join(output_dir, 'plots', 'hypothesis_test.png')
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        print(f"\n✅ Saved: {plot_path}\n")
+        plt.close()
+        
+    else:
+        group_data = [df_test[df_test[group_var_used] == g][test_var].dropna() for g in groups]
+        f_stat, p_value = stats.f_oneway(*group_data)
+        
+        print("ONE-WAY ANOVA")
+        print(f"Testing: {test_var} across {group_var_used} groups\n")
+        for g, data in zip(groups, group_data):
+            print(f"{g}: Mean = {data.mean():.3f}, SD = {data.std():.3f}, N = {len(data)}")
+        print(f"\nF-statistic: {f_stat:.4f}")
+        print(f"P-value:     {p_value:.4f}\n")
+        
+        if p_value < 0.05:
+            print(f"✅ SIGNIFICANT: {test_var} differs significantly across groups (p < 0.05)")
+        else:
+            print(f"❌ NOT SIGNIFICANT: No significant difference across groups (p ≥ 0.05)")
 
 def main():
-    print("\n" + "=" * 50)
-    print("  TIME SERIES DETRENDING ANALYSIS (Python)")
-    print("=" * 50 + "\n")
-    
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     
-    print("📂 Loading data...")
-    data_path = os.path.join(project_root, "data", "EconomicsUSA.csv")
-    df = pd.read_csv(data_path)
-    df['date'] = pd.to_datetime(df['date'])
+    output_dir = os.path.join(project_root, 'output', 'python')
+    os.makedirs(os.path.join(output_dir, 'plots'), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, 'results'), exist_ok=True)
     
-    print(f"   Observations: {len(df)}")
-    print(f"   Variables: {', '.join(df.columns)}")
+    data_path = os.path.join(project_root, 'data', 'cross_sectional_data.csv')
+    df = load_data(data_path)  
+    
+    if not os.path.exists(data_path):
+        os.makedirs(os.path.join(project_root, 'data'), exist_ok=True)
+        df.to_csv(data_path, index=False)
+        print(f"💾 Sample data saved to: {data_path}")
+        print("   You can replace this with your own cross-sectional dataset!\n")
+    
+    print("Dataset Preview:")
+    print(df.head())
     print()
     
-    variables = ["indpro", "cpiaucsl"]
-    forecasts = {}
-    results = []
+    desc_stats = descriptive_analysis(df, output_dir)
     
-    print("=" * 50)
-    print("METHOD 1: LINEAR TREND ESTIMATION")
-    print("=" * 50 + "\n")
+    corr_matrix = correlation_analysis(df, output_dir)
     
-    for i, var_name in enumerate(variables, 1):
-        y = df[var_name].values
-        
-        params = estimate_params(y)
-        alpha = params['alpha']
-        beta = params['beta']
-        
-        t = np.arange(1, len(y) + 1)
-        trend = alpha + beta * t
-        
-        forecasts[f"TREND_{i}"] = trend
-        
-        print(f"{var_name.upper()}:")
-        print(f"  Trend equation: TT = {alpha:.6f} + {beta:.6f}*t")
-        direction = "Increasing" if beta > 0 else "Decreasing"
-        print(f"  Interpretation: {direction} trend by {abs(beta):.6f} per period")
-        print()
-        
-        plt.figure(figsize=(12, 6))
-        plt.plot(y, linewidth=2, color='blue', label='Original')
-        plt.plot(trend, linewidth=2, color='red', linestyle='--', label='Linear Trend')
-        plt.title(f"{var_name.upper()} - Linear Trend", fontsize=14, fontweight='bold')
-        plt.xlabel("Time Period")
-        plt.ylabel("Value")
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        
-        plot_path = os.path.join(project_root, "output", "python", "plots", f"{var_name}_linear_trend.png")
-        plt.savefig(plot_path, dpi=120, bbox_inches='tight')
-        plt.close()
-        
-        print(f"  ✅ Saved: {plot_path}\n")
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
     
-    print("=" * 50)
-    print("METHOD 2: MOVING AVERAGE (ORDER=4)")
-    print("=" * 50 + "\n")
+    if 'final_grade' in df.columns:
+        dependent = 'final_grade'
+        independent = [col for col in ['study_hours', 'previous_grade', 'attendance'] 
+                      if col in df.columns and col != dependent]
+    else:
+        dependent = numeric_cols[0] if len(numeric_cols) > 0 else None
+        independent = numeric_cols[1:4] if len(numeric_cols) > 1 else []
     
-    window = 4
-    for i, var_name in enumerate(variables, 1):
-        y = df[var_name].values
-        ma = pd.Series(y).rolling(window=window, center=False).mean().values
+    if dependent and len(independent) > 0:
+        model, results = regression_analysis(df, dependent, independent, output_dir)
         
-        forecasts[f"MA_{i}"] = ma
-        
-        print(f"{var_name.upper()}:")
-        print(f"  Moving average window: {window} periods")
-        print(f"  First {window-1} values are NaN (not enough data)")
-        print()
-        
-        plt.figure(figsize=(12, 6))
-        plt.plot(y, linewidth=2, color='blue', label='Original')
-        plt.plot(ma, linewidth=2, color='green', linestyle='--', label=f'Moving Average (k={window})')
-        plt.title(f"{var_name.upper()} - Moving Average", fontsize=14, fontweight='bold')
-        plt.xlabel("Time Period")
-        plt.ylabel("Value")
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        
-        plot_path = os.path.join(project_root, "output", "python", "plots", f"{var_name}_moving_average.png")
-        plt.savefig(plot_path, dpi=120, bbox_inches='tight')
-        plt.close()
-        
-        print(f"  ✅ Saved: {plot_path}\n")
+        if len(independent) > 0:
+            hypothesis_testing(df, independent[0], dependent, output_dir)
     
-    print("=" * 50)
-    print("FORECAST EVALUATION STATISTICS")
-    print("=" * 50 + "\n")
-    
-    for model_name, forecast in forecasts.items():
-        var_idx = int(model_name.split('_')[1]) - 1
-        var_name = variables[var_idx]
-        actual = df[var_name].values
-        
-        me = ME(actual, forecast)
-        rmse = RMSE(actual, forecast)
-        mae = MAE(actual, forecast)
-        mpe = MPE(actual, forecast)
-        mape = MAPE(actual, forecast)
-        theil_u = TheilU(actual, forecast)
-        mse_decomp = MSE_decomposition(actual, forecast)
-        
-        results.append({
-            'Model': model_name,
-            'ME': me,
-            'RMSE': rmse,
-            'MAE': mae,
-            'MPE': mpe,
-            'MAPE': mape,
-            'Theil_U': theil_u,
-            'MSE': mse_decomp['MSE'],
-            'UM': mse_decomp['UM'],
-            'UR': mse_decomp['UR'],
-            'UD': mse_decomp['UD']
-        })
-    
-    results_df = pd.DataFrame(results)
-    print(results_df.to_string(index=False))
-    print()
-    
-    results_path = os.path.join(project_root, "output", "python", "results", "forecast_evaluation.csv")
-    results_df.to_csv(results_path, index=False)
-    print(f"✅ Results saved to: {results_path}\n")
-    
-    print("=" * 50)
-    print("INTERPRETATION GUIDE")
-    print("=" * 50 + "\n")
-    print("Lower values = Better forecast accuracy\n")
-    print("• ME (Mean Error): Measures bias (closer to 0 = better)")
-    print("• RMSE: Penalizes large errors, good overall measure")
-    print("• MAE: Average error magnitude")
-    print("• MAPE: Percentage error (easy to interpret)")
-    print("• Theil's U: Normalized accuracy (< 1 = better than naive forecast)\n")
-    print("MSE Decomposition:")
-    print("• UM: Bias proportion (systematic over/under prediction)")
-    print("• UR: Regression proportion (different variation)")
-    print("• UD: Disturbance proportion (unexplained randomness)\n")
-    
-    print("=" * 50)
-    print("SUMMARY")
-    print("=" * 50 + "\n")
-    
-    for var in variables:
-        print(f"{var.upper()}:")
-        var_idx = variables.index(var) + 1
-        
-        trend_rmse = results_df[results_df['Model'] == f"TREND_{var_idx}"]['RMSE'].values
-        ma_rmse = results_df[results_df['Model'] == f"MA_{var_idx}"]['RMSE'].values
-        
-        if len(trend_rmse) > 0 and len(ma_rmse) > 0:
-            if not np.isnan(trend_rmse[0]) and not np.isnan(ma_rmse[0]):
-                if trend_rmse[0] < ma_rmse[0]:
-                    print("  → Linear Trend performs better (lower RMSE)")
-                else:
-                    print("  → Moving Average performs better (lower RMSE)")
-            else:
-                print("  → Cannot compare (missing RMSE values)")
-        print()
-    
-    print("=" * 50)
-    print("ANALYSIS COMPLETE! 🎉")
-    print("=" * 50)
-    print()
-    print("📁 Check your output folder:")
-    print("   output/python/plots/     - All visualizations")
-    print("   output/python/results/   - Forecast evaluation CSV")
-    print()
-    print("✨ You're ready for your exam!")
+    print("\n" + "="*70)
+    print(" ANALYSIS COMPLETE! 🎉 ".center(70))
+    print("="*70)
+    print(f"\n📁 Generated files in: {output_dir}/")
+    print("   • plots/correlation_matrix.png")
+    print("   • plots/regression_fit.png")
+    print("   • plots/residuals.png")
+    print("   • plots/hypothesis_test.png")
+    print("   • results/descriptive_statistics.csv")
+    print("   • results/regression_results.csv")
+    print("\n✨ Ready for your exam!\n")
 
 
 if __name__ == "__main__":
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    
-    os.makedirs(os.path.join(project_root, "output", "python", "plots"), exist_ok=True)
-    os.makedirs(os.path.join(project_root, "output", "python", "results"), exist_ok=True)
-    
     main()
