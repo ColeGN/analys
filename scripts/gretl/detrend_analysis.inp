@@ -1,5 +1,3 @@
-set workdir "/Users/gantogtokhnyamrentsen/Desktop/untitled folder 3/untitled folder"
-
 open data/EconomicsUSA.gdt
 
 setobs 12 1948:01 --time-series

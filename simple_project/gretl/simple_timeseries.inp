@@ -1,0 +1,37 @@
+open data/EconomicsUSA.gdt
+setobs 12 1948:01 --time-series
+
+# Create time index
+series t
+loop i=1..$nobs
+    t[i] = i
+endloop
+
+# 1. Linear Trend Estimation: indpro = α + β*t
+ols indpro const t
+series indpro_trend = $yhat
+
+# 2. Moving Average Smoothing (4-period)
+series indpro_ma = movavg(indpro, 4)
+
+# 3. Calculate Forecast Errors
+series trend_error = indpro - indpro_trend
+scalar trend_rmse = sqrt(mean(trend_error^2))
+scalar trend_mae = mean(abs(trend_error))
+
+smpl 4 $nobs
+series ma_error = indpro - indpro_ma
+scalar ma_rmse = sqrt(mean(ma_error^2))
+scalar ma_mae = mean(abs(ma_error))
+smpl full
+
+# 4. Save Results
+outfile "output/results/forecast_metrics.csv" --quiet
+printf "Method,RMSE,MAE\n"
+printf "Linear_Trend,%.4f,%.4f\n", trend_rmse, trend_mae
+printf "Moving_Average,%.4f,%.4f\n", ma_rmse, ma_mae
+end outfile
+
+# 5. Create Plots
+catch gnuplot indpro indpro_trend --with-lines --output=output/plots/trend_plot.png
+catch gnuplot indpro indpro_ma --with-lines --output=output/plots/ma_plot.png
